@@ -22,6 +22,7 @@ from keras.layers import Input, Dense, Conv2D, MaxPooling2D, UpSampling2D
 from keras.regularizers import l1
 from keras.optimizers import SGD
 from keras.models import Model
+from keras.callbacks import TensorBoard
 
 # this is our input placeholder
 input_img = Input(shape=(28, 28, 1))
@@ -94,7 +95,8 @@ for i in range(100):
                 batch_size=new_bs,
                 shuffle=True,
                 validation_data=(x_test, x_test),
-                initial_epoch=i)
+                initial_epoch=i,
+                callbacks=[TensorBoard(log_dir='/tmp/autoencoder')])
                 #XXX: get autoencoder.val_loss and <> BATCH_SIZE On Plateau
 
 print("It took {}sec to train the model".format(time()-startTime))
