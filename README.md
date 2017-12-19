@@ -1,9 +1,9 @@
 # styleTransfer
-Implementation of Universal Style Transfer via Feature Transforms, `Yi et al. (2017)`, with Keras
+Implementation of Universal Style Transfer via Feature Transforms, `Yi et al. (2017)`, with Keras (upcoming)
 
 #### Auto encoder
 * CNN Auto encoder
-* Trained on `<insert-dataset-name>`
+* Trained on `<insert-dataset-name>` (upcoming)
 * Increasing Batch Size on Epoch begin as described in `Smith, Kindermans, Le (2017)`
 
 #### Dependencies
