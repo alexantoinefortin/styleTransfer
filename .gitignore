@@ -13,6 +13,7 @@ __pycache__/
 *.npy
 *.png
 *.jpg
+input/
 
 # Distribution / packaging
 .Python

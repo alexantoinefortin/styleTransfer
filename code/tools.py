@@ -142,3 +142,10 @@ def cp(path_to_save):
                         save_weights_only=False, # model.save_weights(filepath) if True else model.save(filepath)
                         period=2 # Perform ModelCheckpoint every period epoch
                         )
+
+#=================
+# Model generators
+#=================
+def define_model(TARGET_SIZE):
+    """placeholder for future usage
+    """
