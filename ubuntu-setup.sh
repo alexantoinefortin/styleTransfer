@@ -24,6 +24,14 @@ sudo apt-get -y install libblas-doc
 sudo apt-get -y install liblapack-dev
 sudo apt-get -y install liblapack-doc
 
+#gcc
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+sudo apt-get update
+sudo apt-get -y install gcc-5 g++-5
+sudo apt-get update
+sudo apt-get upgrade
+sudo apt-get dist-upgrade
+sudo apt autoremove
 # fortran
 sudo apt-get -y install gfortran
 #sudo apt-get -y install texlive
@@ -163,7 +171,7 @@ sudo chmod a+r /usr/local/cuda-9.0/include/cudnn.h /usr/local/cuda-9.0/lib64/lib
 # Testing out cuDNN
 cd /usr/local/cuda/samples/5_Simulations/nbody
 sudo make
-./nbody -benchmark -numbodies=2560000 -device=1
+./nbody -benchmark -numbodies=2560000 -device=0
 
 cd /usr/local/cuda/samples/1_Utilities/deviceQuery
 sudo makegithub tensorflow
