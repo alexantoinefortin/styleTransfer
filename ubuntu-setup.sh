@@ -95,6 +95,13 @@ sudo apt-get update && sudo apt-get -y install bazel
 # Upgrade to newer version of bazel
 sudo apt-get upgrade bazel
 
+# mkl library, required if setting --config=mkl when compiling TF from source
+# default install location is in /usr/local/bin
+cd ~/Downloads
+git clone https://github.com/01org/mkl-dnn.git
+cd mkl-dnn/scripts && ./prepare_mkl.sh && cd ..
+mkdir -p build && cd build && cmake .. && make
+sudo make install
  ###  ### ##       ### ###
 ##########################
 # 0. GPU cuda install
@@ -129,8 +136,9 @@ sudo apt-get install cuda-toolkit-9.0
 
 nano ~/.bashrc
 # Just copy paste that in .bashrc then save & exit
+# the LD_LIBRARY_PATH is updated for both mkl library (/usr/local/lib) and cudo-9.0
 export PATH=/usr/local/cuda-9.0/bin${PATH:+:${PATH}}
-export LD_LIBRARY_PATH=/usr/local/cuda-9.0/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+export LD_LIBRARY_PATH=/usr/local/lib:/usr/local/cuda-9.0/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 source ~/.bashrc
 
 # 0.3 CUDA post-installation actions
