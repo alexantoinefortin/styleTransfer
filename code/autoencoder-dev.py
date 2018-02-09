@@ -41,36 +41,36 @@ def define_model(target_size, level):
     encoder.layers[-1].outbound_nodes = []
     # Setting-up decoder depending on level
     if level==5:
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv1')(encoder.output)
+        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv1')(encoder.outputs[-1])
         decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv2')(decoder)
         decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv3')(decoder)
         decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv4')(decoder)
         decoder = UpSampling2D((2, 2), name='de_block5_pool2')(decoder) #XXX: UpSampling2D with nearest neibs?
     elif level==4:
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv1')(encoder.output)
+        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv1')(encoder.outputs[-1])
         decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv2')(decoder)
         decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv3')(decoder)
         decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv4')(decoder)
         decoder = UpSampling2D((2, 2), name='de_block4_pool')(decoder)
     elif level==3:
-        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv1')(encoder.output)
+        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv1')(encoder.outputs[-1])
         decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv2')(decoder)
         decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv3')(decoder)
         decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv4')(decoder)
         decoder = UpSampling2D((2, 2), name='de_block3_pool')(decoder)
     elif level==2:
-        decoder = Conv2D(128, (3, 3), activation='relu', padding='same', name='de_block2_conv1')(encoder.output)
+        decoder = Conv2D(128, (3, 3), activation='relu', padding='same', name='de_block2_conv1')(encoder.outputs[-1])
         decoder = Conv2D(128, (3, 3), activation='relu', padding='same', name='de_block2_conv2')(decoder)
         decoder = UpSampling2D((2, 2), name='de_block2_pool')(decoder)
     elif level==1:
-        decoder = Conv2D(64, (3, 3), activation='relu', padding='same', name='de_block1_conv1')(encoder.output)
+        decoder = Conv2D(64, (3, 3), activation='relu', padding='same', name='de_block1_conv1')(encoder.outputs[-1])
         decoder = Conv2D(64, (3, 3), activation='relu', padding='same', name='de_block1_conv2')(decoder)
         decoder = UpSampling2D((2, 2), name='de_block1_pool')(decoder)
         decoder = Conv2D(3, (3, 3), activation='sigmoid', padding='same', name='output_block')(decoder)
     # decoder_top is the pretrained decoder for finer-level decoder
     for idx, tops in enumerate(level_dict.get(level).load_decoders):
         tmp_top = model_from_yaml(tops+'.yaml')
-        tmp_top = tmp_top.load_weights(tops+.'hdf5', by_name=False)
+        tmp_top = tmp_top.load_weights(tops+'.hdf5', by_name=False)
         if idx==0: #First iteration of the for-loop
             tmp_decoder_top = tmp_top
         else:
@@ -79,18 +79,17 @@ def define_model(target_size, level):
         decoder_top = tmp_decoder_top
         for layer in decoder_top.layers: # Do not train top decoder
             layer.trainable = False
-    # TODO: Putting the model pieces together
-        decoder = Model(input=[decoder.input], output=[decoder_top.output])
-        autoencoder = Model(input=[encoder.input], output=[decoder.output])
-    ("Printing results for level: {}".format(level))
-    print(autoencoder.summary())
-    return 1
+    else: # level == 1
+        decoder_top = decoder
+    # Putting the model pieces together
+    #decoder = Model(input=[decoder.get_layer(first_layer_name).input], output=[decoder_top])
+    autoencoder = Model(input=[encoder.input], output=[decoder])
+    return encoder, autoencoder
 
-a = define_model(target_size=target_size, level=1)
-a = define_model(target_size=target_size, level=2)
-a = define_model(target_size=target_size, level=3)
-a = define_model(target_size=target_size, level=4)
-a = define_model(target_size=target_size, level=5)
+e, a = define_model(target_size=target_size, level=1)
+# quick check
+for layer in a.layers:
+    print("name:{:18s}\ttrainable:{}, output_shape:{}".format(layer.name, layer.trainable, layer.output_shape))
 
 # TODO: Set decoder accordingly to level:
 # eg: level 5: load decoder for 4-3-2-1 and stack as so: encoder, level5, frozen-decoder-4-3-2-1
