@@ -95,28 +95,6 @@ sudo apt-get update && sudo apt-get -y install bazel
 # Upgrade to newer version of bazel
 sudo apt-get upgrade bazel
 
-#======================================
-#Good time to download dataset & unpack
-#======================================
-mkdir ~/cdiscount
-mkdir ~/cdiscount/input
-mkdir ~/cdiscount/input/data
-mkdir ~/cdiscount/input/small
-mkdir ~/cdiscount/input/train
-mkdir ~/cdiscount/input/test
-cd ~/cdiscount/input
-kg download -u alexfortin2 -p <password> -c cdiscount-image-classification-challenge -f train.bson
-wget https://www.kaggle.com/c/cdiscount-image-classification-challenge/download/train.bson
-scp -rp ~/Documents/projects/cdiscount/code aws-cdiscount:/home/ubuntu/cdiscount/code
-scp -rp ~/Documents/projects/cdiscount/generated_img aws-cdiscount:/home/ubuntu/cdiscount/generated_img
-scp -rp ~/Documents/projects/cdiscount/logs aws-cdiscount:/home/ubuntu/cdiscount/logs
-scp -rp ~/Documents/projects/cdiscount/models aws-cdiscount:/home/ubuntu/cdiscount/models
-
-#==========================
-#Unpack images with Python3
-#==========================
-cd ~/cdiscount/code
-python3 00-TrainTest-Extraction.py
  ###  ### ##       ### ###
 ##########################
 # 0. GPU cuda install
@@ -145,6 +123,7 @@ cd ~/Downloads
 
 wget https://developer.nvidia.com/compute/cuda/9.0/Prod/local_installers/cuda-repo-ubuntu1604-9-0-local_9.0.176-1_amd64-deb
 sudo dpkg -i cuda-repo-ubuntu1604-9-0-local_9.0.176-1_amd64-deb
+sudo apt-key add /var/cuda-repo-9-0-local/7fa2af80.pub
 sudo apt-get update
 sudo apt-get install cuda-toolkit-9.0
 
@@ -174,7 +153,7 @@ sudo make
 ./nbody -benchmark -numbodies=2560000 -device=0
 
 cd /usr/local/cuda/samples/1_Utilities/deviceQuery
-sudo makegithub tensorflow
+sudo make
 ./deviceQuery
 
 # One extra tool requiered for TF
@@ -188,12 +167,13 @@ cd tensorflow
 git checkout r1.5
 ./configure ## Used cuDNN version 5.1.10
 #bazel build --config=opt --config=cuda //tensorflow/tools/pip_package:build_pip_package
-bazel build -c opt --copt=-march=native --copt=-mavx --copt=-mavx2 --copt=-mfma --copt=-msse4.2 --copt=-mfpmath=both --config=cuda --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" //tensorflow/tools/pip_package:build_pip_package
+bazel build --config=mkl -c opt --copt=-march=native --copt=-mavx --copt=-mavx2 --copt=-mfma --copt=-msse4.2 --copt=-mfpmath=both --config=cuda --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=0" //tensorflow/tools/pip_package:build_pip_package
 bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
-mv tensorflow-1.2.0rc1-cp27-cp27mu-linux_x86_64.whl /tmp/tensorflow_pkg/tensorflow-1.2.0rc1-cp27-cp27mu-linux_x86_64.whl
+#mv tensorflow-1.2.0rc1-cp27-cp27mu-linux_x86_64.whl /tmp/tensorflow_pkg/tensorflow-1.2.0rc1-cp27-cp27mu-linux_x86_64.whl
 # wheel file name's depend on your OS and other stuff, double check.
 #sudo pip install /tmp/tensorflow_pkg/tensorflow-1.2.1-cp27-cp27m-macosx_10_6_x86_64.whl
-sudo pip3 install tensorflow-1.5.0rc1-cp36-cp36m-linux_x86_64.whl
+cd /tmp/tensorflow_pkg
+sudo pip3 install tensorflow-1.5.0-cp36-cp36m-linux_x86_64.whl
 sudo pip3 install keras
 #No gpu
 #sudo pip install --upgrade https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-1.0.1-cp27-none-linux_x86_64.whl
