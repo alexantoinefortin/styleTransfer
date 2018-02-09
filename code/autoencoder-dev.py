@@ -6,7 +6,7 @@ session = tf.Session(config=config)
 import collections
 from keras.applications.vgg19 import VGG19
 from keras.layers import Input, Dense, Conv2D, MaxPooling2D, UpSampling2D
-from keras.models import Model, load_model
+from keras.models import Model, model_from_yaml
 from keras import backend as K
 target_size=(256, 256, 3)
 # Since we are using MaxPooling2D/UpSampling2D, the input shape must be
@@ -15,10 +15,10 @@ target_size=(256, 256, 3)
 level_def = collections.namedtuple('level_def', 'pop_from_encoder load_decoders')
 level_dict ={
 1:level_def(pop_from_encoder=18, load_decoders=[]),
-2:level_def(pop_from_encoder=15, load_decoders=['level1_decoder.h5']),
-3:level_def(pop_from_encoder=10, load_decoders=['level2_decoder.h5', 'level1_decoder.h5']),
-4:level_def(pop_from_encoder=5, load_decoders=['level3_decoder.h5', 'level2_decoder.h5', 'level1_decoder.h5']),
-5:level_def(pop_from_encoder=0, load_decoders=['level4_decoder.h5', 'level3_decoder.h5', 'level2_decoder.h5', 'level1_decoder.h5'])
+2:level_def(pop_from_encoder=15, load_decoders=['level1_decoder']),
+3:level_def(pop_from_encoder=10, load_decoders=['level2_decoder', 'level1_decoder']),
+4:level_def(pop_from_encoder=5, load_decoders=['level3_decoder', 'level2_decoder', 'level1_decoder']),
+5:level_def(pop_from_encoder=0, load_decoders=['level4_decoder', 'level3_decoder', 'level2_decoder', 'level1_decoder'])
             }
 
 def define_model(target_size, level):
@@ -34,7 +34,7 @@ def define_model(target_size, level):
     # Freeze encoder
     for layer in encoder.layers:
         layer.trainable = False
-    # Remove undesired layers
+    # Remove undesired layers from the encoder
     for _ in range(level_dict.get(level).pop_from_encoder):
         encoder.layers.pop()
     encoder.outputs = [encoder.layers[-1].output]
@@ -68,21 +68,22 @@ def define_model(target_size, level):
         decoder = UpSampling2D((2, 2), name='de_block1_pool')(decoder)
         decoder = Conv2D(3, (3, 3), activation='sigmoid', padding='same', name='output_block')(decoder)
     # decoder_top is the pretrained decoder for finer-level decoder
-    # XXX: re-code this part with load_weights, model_from_yaml. That way,
-    # XXX: load_model() will not remember the loss, gradients, etc from the encoder_top.
     for idx, tops in enumerate(level_dict.get(level).load_decoders):
-        tmp_top = load_model(tops)
+        tmp_top = model_from_yaml(tops+'.yaml')
+        tmp_top = tmp_top.load_weights(tops+.'hdf5', by_name=False)
         if idx==0: #First iteration of the for-loop
             tmp_decoder_top = tmp_top
         else:
             tmp_decoder_top = Model(input=[tmp_decoder_top.output], output=[tmp_top.output])
-    if len(level_dict.get(level).load_decoders):
+    if len(level_dict.get(level).load_decoders): # Do nothing if level==1
         decoder_top = tmp_decoder_top
-        for layer in decoder_top.layers:
+        for layer in decoder_top.layers: # Do not train top decoder
             layer.trainable = False
     # TODO: Putting the model pieces together
-    print("Printing results for level: {}".format(level))
-    print(encoder.summary())
+        decoder = Model(input=[decoder.input], output=[decoder_top.output])
+        autoencoder = Model(input=[encoder.input], output=[decoder.output])
+    ("Printing results for level: {}".format(level))
+    print(autoencoder.summary())
     return 1
 
 a = define_model(target_size=target_size, level=1)
