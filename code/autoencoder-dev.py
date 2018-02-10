@@ -1,100 +1,68 @@
+#!/usr/local/bin/python3.6
 import tensorflow as tf
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 session = tf.Session(config=config)
 
-import collections
-from keras.applications.vgg19 import VGG19
-from keras.layers import Input, Dense, Conv2D, MaxPooling2D, UpSampling2D
-from keras.models import Model, model_from_yaml
-from keras import backend as K
-target_size=(256, 256, 3)
+import imp
+from time import time
+t = imp.load_source('tools', './code/tools.py')
 # Since we are using MaxPooling2D/UpSampling2D, the input shape must be
 # divisible by 2^5 (there are 5 MaxPooling2D operations.). 128, 256, 512, ...
+TARGET_SIZE=(128, 128, 3) # XXX: Some COCO images are smaller than 256x256 (should I remove them from train&testing sets?)
+BATCH_SIZE = 128
+# Image generators
+startTime = time()
+genTrain = t.genTrain()
+genTest = t.genTest()
+traingen = t.traingen(path='./inputs/train2017', genTrain=genTrain, BATCH_SIZE=BATCH_SIZE, RANDOM_CROP_SIZE=TARGET_SIZE)
+testgen = t.testgen(path='./inputs/val2017', genTest=genTest, BATCH_SIZE=BATCH_SIZE, RANDOM_CROP_SIZE=TARGET_SIZE)
+print("The image generators took {}s to initiate.".format(int(time()-startTime)))
 
-level_def = collections.namedtuple('level_def', 'pop_from_encoder load_decoders')
-level_dict ={
-1:level_def(pop_from_encoder=18, load_decoders=[]),
-2:level_def(pop_from_encoder=15, load_decoders=['level1_decoder']),
-3:level_def(pop_from_encoder=10, load_decoders=['level2_decoder', 'level1_decoder']),
-4:level_def(pop_from_encoder=5, load_decoders=['level3_decoder', 'level2_decoder', 'level1_decoder']),
-5:level_def(pop_from_encoder=0, load_decoders=['level4_decoder', 'level3_decoder', 'level2_decoder', 'level1_decoder'])
-            }
+#=================
+# Model Parameters
+#=================
+from keras.optimizers import SGD
+from keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau
+LEVEL = 1 # 1,2,3,4,5: train them turn-by-turn in this order
+MODEL_NAME = 'level{}_decoder'.format(LEVEL)
+NB_EPOCH = 65
+NB_STEPS_PER_EPOCH = int(118287/BATCH_SIZE) # Number of images in train set
+NB_VAL_STEPS_PER_EPOCH = int(5000/BATCH_SIZE)
+INIT_LR = 0.1
+REDUCE_LR_ON_PLATEAU_FACTOR = 0.5 # every plateau, multiply by this number
 
-def define_model(target_size, level):
-    """
-    @target_size: Tuple. Size of the input image (width, height, channels)
-    eg: (256, 256, 3)
-    @level: Int. level of encoding. Load the first level block of convolution
-    from VGG19-imageNet.
-    """
-    encoder = VGG19(include_top=False, weights='imagenet', input_tensor=None,
-    input_shape=(target_size[0], target_size[1], target_size[2]),
-    pooling=None, classes=None)
-    # Freeze encoder
-    for layer in encoder.layers:
-        layer.trainable = False
-    # Remove undesired layers from the encoder
-    for _ in range(level_dict.get(level).pop_from_encoder):
-        encoder.layers.pop()
-    encoder.outputs = [encoder.layers[-1].output]
-    encoder.layers[-1].outbound_nodes = []
-    # Setting-up decoder depending on level
-    if level==5:
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv2')(decoder)
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv3')(decoder)
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv4')(decoder)
-        decoder = UpSampling2D((2, 2), name='de_block5_pool2')(decoder) #XXX: UpSampling2D with nearest neibs?
-    elif level==4:
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv2')(decoder)
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv3')(decoder)
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv4')(decoder)
-        decoder = UpSampling2D((2, 2), name='de_block4_pool')(decoder)
-    elif level==3:
-        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv2')(decoder)
-        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv3')(decoder)
-        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv4')(decoder)
-        decoder = UpSampling2D((2, 2), name='de_block3_pool')(decoder)
-    elif level==2:
-        decoder = Conv2D(128, (3, 3), activation='relu', padding='same', name='de_block2_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(128, (3, 3), activation='relu', padding='same', name='de_block2_conv2')(decoder)
-        decoder = UpSampling2D((2, 2), name='de_block2_pool')(decoder)
-    elif level==1:
-        decoder = Conv2D(64, (3, 3), activation='relu', padding='same', name='de_block1_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(64, (3, 3), activation='relu', padding='same', name='de_block1_conv2')(decoder)
-        decoder = UpSampling2D((2, 2), name='de_block1_pool')(decoder)
-        decoder = Conv2D(3, (3, 3), activation='sigmoid', padding='same', name='output_block')(decoder)
-    # decoder_top is the pretrained decoder for finer-level decoder
-    for idx, tops in enumerate(level_dict.get(level).load_decoders):
-        tmp_top = model_from_yaml(tops+'.yaml')
-        tmp_top = tmp_top.load_weights(tops+'.hdf5', by_name=False)
-        if idx==0: #First iteration of the for-loop
-            tmp_decoder_top = tmp_top
-        else:
-            tmp_decoder_top = Model(input=[tmp_decoder_top.output], output=[tmp_top.output])
-    if len(level_dict.get(level).load_decoders): # Do nothing if level==1
-        decoder_top = tmp_decoder_top
-        for layer in decoder_top.layers: # Do not train top decoder
-            layer.trainable = False
-    else: # level == 1
-        decoder_top = decoder
-    # Putting the model pieces together
-    #decoder = Model(input=[decoder.get_layer(first_layer_name).input], output=[decoder_top])
-    autoencoder = Model(input=[encoder.input], output=[decoder])
-    return encoder, autoencoder
-
-e, a = define_model(target_size=target_size, level=1)
+# Define model
+e, a = t.define_model(target_size=TARGET_SIZE, level=1)
 # quick check
 for layer in a.layers:
     print("name:{:18s}\ttrainable:{}, output_shape:{}".format(layer.name, layer.trainable, layer.output_shape))
 
-# TODO: Set decoder accordingly to level:
-# eg: level 5: load decoder for 4-3-2-1 and stack as so: encoder, level5, frozen-decoder-4-3-2-1
-# eg: level 4: load encoder up to level 4, set-up trainable level 4 decoder, pass to frozen-decoder-3-2-1
+optimizer = SGD(lr=INIT_LR, decay=0, momentum=0.9, nesterov=True)
+# Callbacks
+cp = t.cp(path_to_save='./models/{}'.format(MODEL_NAME), save_weights_only=True)
+r_lr = ReduceLROnPlateau(   monitor='val_loss',
+                            factor=REDUCE_LR_ON_PLATEAU_FACTOR,
+                            patience=1,
+                            verbose=0,
+                            mode='auto',
+                            epsilon=0.0001,
+                            cooldown=0,
+                            min_lr=0.0001)
+#=======================================================
+# compile the model
+# should be done *after* setting layers to non-trainable
+#=======================================================
+a.compile(optimizer=optimizer, loss='mse', metrics=['mae', 'mse'])
 
-
-autoencoder = Model(input=[encoder.input], output=[decoder])
-autoencoder.summary()
+print("NB_EPOCH:{}".format(NB_EPOCH))
+print("nb of minibatches to process (train):{}".format(NB_STEPS_PER_EPOCH))
+print("nb of minibatches to process (test) :{}".format(NB_VAL_STEPS_PER_EPOCH))
+a.fit_generator(
+        generator=traingen,
+        steps_per_epoch=NB_STEPS_PER_EPOCH,
+        epochs=NB_EPOCH,
+        workers=12,
+        callbacks=[cp, r_lr],
+        validation_data=testgen,
+        validation_steps=NB_VAL_STEPS_PER_EPOCH)
