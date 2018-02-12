@@ -7,12 +7,14 @@ This python script regroups functions used thorough our code
 challenge
 """
 import os, imp, collections, threading, numpy as np
+from numba import jit
 #from keras.preprocessing.image import ImageDataGenerator
 image = imp.load_source('image', './code/ImageGenerator.py')
 from keras.callbacks import ModelCheckpoint
 #===============
 #Cropping images
 #===============
+@jit
 def preprocess_input(x):
     x = x.astype('float32') / 255.
     return x
@@ -163,14 +165,16 @@ def define_model(target_size, level):
     from keras.layers import Input, Dense, Conv2D, MaxPooling2D, UpSampling2D
     from keras.models import Model, model_from_yaml
     from keras import backend as K
+    from keras.initializers import VarianceScaling
+    MSRA = VarianceScaling(scale=2.0, mode='fan_in', distribution='normal', seed=None)
     # level_dict is a dictionary of namedtuples with actions to take depending on the value of level
     level_def = collections.namedtuple('level_def', 'pop_from_encoder load_decoders')
     level_dict ={
-    1:level_def(pop_from_encoder=18, load_decoders=[]),
-    2:level_def(pop_from_encoder=15, load_decoders=['level1_decoder']),
-    3:level_def(pop_from_encoder=10, load_decoders=['level2_decoder', 'level1_decoder']),
-    4:level_def(pop_from_encoder=5, load_decoders=['level3_decoder', 'level2_decoder', 'level1_decoder']),
-    5:level_def(pop_from_encoder=0, load_decoders=['level4_decoder', 'level3_decoder', 'level2_decoder', 'level1_decoder'])
+    1:level_def(pop_from_encoder=20, load_decoders=None),
+    2:level_def(pop_from_encoder=17, load_decoders='level1_decoder'),
+    3:level_def(pop_from_encoder=14, load_decoders='level2_decoder'),
+    4:level_def(pop_from_encoder=9, load_decoders='level3_decoder'),
+    5:level_def(pop_from_encoder=4, load_decoders='level4_decoder')
                 }
 
     encoder = VGG19(include_top=False, weights='imagenet', input_tensor=None,
@@ -184,49 +188,39 @@ def define_model(target_size, level):
         encoder.layers.pop()
     encoder.outputs = [encoder.layers[-1].output]
     encoder.layers[-1].outbound_nodes = []
+
     # Setting-up decoder depending on level
     if level==5:
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv2')(decoder)
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv3')(decoder)
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block5_conv4')(decoder)
-        decoder = UpSampling2D((2, 2), name='de_block5_pool2')(decoder) #XXX: UpSampling2D with nearest neibs?
+        decoder = Conv2D(512, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block5_conv4')(encoder.outputs[-1])
+        decoder = UpSampling2D((2, 2), name='de_block5_pool2')(decoder)
+        decoder = Conv2D(512, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block5_conv3')(decoder)
+        decoder = Conv2D(512, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block5_conv2')(decoder)
+        decoder = Conv2D(512, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block5_conv1')(decoder)
     elif level==4:
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv2')(decoder)
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv3')(decoder)
-        decoder = Conv2D(512, (3, 3), activation='relu', padding='same', name='de_block4_conv4')(decoder)
+        decoder = Conv2D(256, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block4_conv4')(encoder.outputs[-1])
         decoder = UpSampling2D((2, 2), name='de_block4_pool')(decoder)
+        decoder = Conv2D(256, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block4_conv3')(decoder)
+        decoder = Conv2D(256, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block4_conv2')(decoder)
+        decoder = Conv2D(256, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block4_conv1')(decoder)
     elif level==3:
-        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv2')(decoder)
-        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv3')(decoder)
-        decoder = Conv2D(256, (3, 3), activation='relu', padding='same', name='de_block3_conv4')(decoder)
+        decoder = Conv2D(128, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block3_conv2')(encoder.outputs[-1])
         decoder = UpSampling2D((2, 2), name='de_block3_pool')(decoder)
+        decoder = Conv2D(128, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block3_conv1')(decoder)
     elif level==2:
-        decoder = Conv2D(128, (3, 3), activation='relu', padding='same', name='de_block2_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(128, (3, 3), activation='relu', padding='same', name='de_block2_conv2')(decoder)
+        decoder = Conv2D(64, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block2_conv1')(encoder.outputs[-1])
         decoder = UpSampling2D((2, 2), name='de_block2_pool')(decoder)
     elif level==1:
-        decoder = Conv2D(64, (3, 3), activation='relu', padding='same', name='de_block1_conv1')(encoder.outputs[-1])
-        decoder = Conv2D(64, (3, 3), activation='relu', padding='same', name='de_block1_conv2')(decoder)
-        decoder = UpSampling2D((2, 2), name='de_block1_pool')(decoder)
-        decoder = Conv2D(3, (3, 3), activation='sigmoid', padding='same', name='output_block')(decoder)
+        decoder = Conv2D(64, (3, 3), activation='relu', kernel_initializer=MSRA, padding='same', name='de_block1_conv1')(encoder.outputs[-1])
+        decoder = Conv2D(3, (3, 3), activation='linear', kernel_initializer=MSRA, padding='same', name='output_block')(decoder)
     # decoder_top is the pretrained decoder for finer-level decoder
-    for idx, tops in enumerate(level_dict.get(level).load_decoders):
-        tmp_top = model_from_yaml(tops+'.yaml')
-        tmp_top = tmp_top.load_weights(tops+'.hdf5', by_name=False)
-        if idx==0: #First iteration of the for-loop
-            tmp_decoder_top = tmp_top
-        else:
-            tmp_decoder_top = Model(input=[tmp_decoder_top.output], output=[tmp_top.output])
-    if len(level_dict.get(level).load_decoders): # Do nothing if level==1
-        decoder_top = tmp_decoder_top
-        for layer in decoder_top.layers: # Do not train top decoder
+    if type(level_dict.get(level).load_decoders)!=type(None): # Do nothing if level==1
+        tmp_top = model_from_yaml(level_dict.get(level).load_decoders+'.yaml')
+        tmp_top = tmp_top.load_weights(level_dict.get(level).load_decoders+'.hdf5', by_name=False)
+        for layer in tmp_top.layers: # Do not train top decoder
             layer.trainable = False
-    else: # level == 1
+        decoder_top = Model(input=[decoder], output=[tmp_top.output])
+    else: # if training level==1
         decoder_top = decoder
     # Putting the model pieces together
-    #decoder = Model(input=[decoder.get_layer(first_layer_name).input], output=[decoder_top])
-    autoencoder = Model(input=[encoder.input], output=[decoder])
+    autoencoder = Model(input=[encoder.input], output=[decoder_top])
     return encoder, autoencoder

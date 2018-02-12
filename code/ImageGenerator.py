@@ -137,7 +137,6 @@ def random_shear(x, intensity, row_axis=1, col_axis=2, channel_axis=0,
     x = apply_transform(x, transform_matrix, channel_axis, fill_mode, cval)
     return x
 
-
 def random_zoom(x, zoom_range, row_axis=1, col_axis=2, channel_axis=0,
                 fill_mode='nearest', cval=0.):
     """Performs a random spatial zoom of a Numpy image tensor.
@@ -174,7 +173,6 @@ def random_zoom(x, zoom_range, row_axis=1, col_axis=2, channel_axis=0,
     x = apply_transform(x, transform_matrix, channel_axis, fill_mode, cval)
     return x
 
-
 def random_channel_shift(x, intensity, channel_axis=0):
     x = np.rollaxis(x, channel_axis, 0)
     min_x, max_x = np.min(x), np.max(x)
@@ -184,7 +182,6 @@ def random_channel_shift(x, intensity, channel_axis=0):
     x = np.rollaxis(x, 0, channel_axis + 1)
     return x
 
-
 def transform_matrix_offset_center(matrix, x, y):
     o_x = float(x) / 2 + 0.5
     o_y = float(y) / 2 + 0.5
@@ -192,7 +189,6 @@ def transform_matrix_offset_center(matrix, x, y):
     reset_matrix = np.array([[1, 0, -o_x], [0, 1, -o_y], [0, 0, 1]])
     transform_matrix = np.dot(np.dot(offset_matrix, matrix), reset_matrix)
     return transform_matrix
-
 
 def apply_transform(x,
                     transform_matrix,
@@ -225,7 +221,6 @@ def apply_transform(x,
     x = np.stack(channel_images, axis=0)
     x = np.rollaxis(x, 0, channel_axis + 1)
     return x
-
 
 def flip_axis(x, axis):
     x = np.asarray(x).swapaxes(axis, 0)

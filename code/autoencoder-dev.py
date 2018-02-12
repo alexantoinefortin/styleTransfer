@@ -1,10 +1,11 @@
 #!/usr/local/bin/python3.6
 import tensorflow as tf
 config = tf.ConfigProto()
-config.gpu_options.allow_growth = True
+#config.gpu_options.allow_growth = True
+config.gpu_options.per_process_gpu_memory_fraction = 0.6
 session = tf.Session(config=config)
 
-import imp
+import imp, numpy as np
 from time import time
 t = imp.load_source('tools', './code/tools.py')
 # Since we are using MaxPooling2D/UpSampling2D, the input shape must be
@@ -33,7 +34,7 @@ INIT_LR = 0.1
 REDUCE_LR_ON_PLATEAU_FACTOR = 0.5 # every plateau, multiply by this number
 
 # Define model
-e, a = t.define_model(target_size=TARGET_SIZE, level=1)
+e, a = t.define_model(target_size=TARGET_SIZE, level=1) # encoder, autoencoder
 # quick check
 for layer in a.layers:
     print("name:{:18s}\ttrainable:{}, output_shape:{}".format(layer.name, layer.trainable, layer.output_shape))
@@ -44,16 +45,30 @@ cp = t.cp(path_to_save='./models/{}'.format(MODEL_NAME), save_weights_only=True)
 r_lr = ReduceLROnPlateau(   monitor='val_loss',
                             factor=REDUCE_LR_ON_PLATEAU_FACTOR,
                             patience=1,
-                            verbose=0,
+                            verbose=10,
                             mode='auto',
                             epsilon=0.0001,
                             cooldown=0,
                             min_lr=0.0001)
+# Custom loss
+from keras import backend as K
+def custom_loss(y_true, y_pred):
+    pixel_loss = K.mean(K.square(y_pred - y_true), axis=-1)
+    # Feature loss: To do this, we pass y_true and y_pred into our fixed encoder e.
+    # Construct a graph to evaluate feature_pred and feature_true
+    feature_pred, feature_true = y_pred, y_true
+    for layer in e.layers:
+        feature_pred = layer(feature_pred)
+        feature_true = layer(feature_true)
+
+    feature_loss = K.mean(K.square(feature_pred-feature_true), axis=-1)
+    return pixel_loss + feature_loss
+
 #=======================================================
 # compile the model
 # should be done *after* setting layers to non-trainable
 #=======================================================
-a.compile(optimizer=optimizer, loss='mse', metrics=['mae', 'mse'])
+a.compile(optimizer=optimizer, loss=custom_loss, metrics=['mae', 'mse'])
 
 print("NB_EPOCH:{}".format(NB_EPOCH))
 print("nb of minibatches to process (train):{}".format(NB_STEPS_PER_EPOCH))
@@ -62,7 +77,7 @@ a.fit_generator(
         generator=traingen,
         steps_per_epoch=NB_STEPS_PER_EPOCH,
         epochs=NB_EPOCH,
-        workers=12,
+        workers=20,
         callbacks=[cp, r_lr],
         validation_data=testgen,
         validation_steps=NB_VAL_STEPS_PER_EPOCH)
