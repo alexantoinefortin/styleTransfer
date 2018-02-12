@@ -8,11 +8,11 @@ __pycache__/
 
 # Other stuff
 *.pyc
-./models/level1_decoder/*
-./models/level2_decoder/*
-./models/level3_decoder/*
-./models/level4_decoder/*
-./models/level5_decoder/*
+./models/level1_decoder/*.hdf5
+./models/level2_decoder/*.hdf5
+./models/level3_decoder/*.hdf5
+./models/level4_decoder/*.hdf5
+./models/level5_decoder/*.hdf5
 .DS_Store
 *.npy
 *.png
