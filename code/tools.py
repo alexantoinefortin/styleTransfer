@@ -7,6 +7,7 @@ This python script regroups functions used thorough our code
 challenge
 """
 import os, imp, collections, threading, numpy as np
+from skimage.transform import resize as skimage_resize
 from numba import jit
 #from keras.preprocessing.image import ImageDataGenerator
 image = imp.load_source('image', './code/ImageGenerator.py')
@@ -17,11 +18,31 @@ from keras.callbacks import ModelCheckpoint
 @jit
 def preprocess_input(x):
     x = x.astype('float32') / 255.
-    return x
+    x -= 0.5
+    return x * 2
 
 def postprocess_int(x):
-    x *= 255.
-    return x
+    x /= 2
+    x += 0.5
+    return x * 255.
+
+def resize_img(img, resize=512):
+    """
+    Resize short side to resize
+    @img: np.ndarray The image numpy.array to resize
+    @resize: Int. The desired lenght of the short side of the image.
+    """
+    height, width = img.shape[0], img.shape[1]
+    img = preprocess_input(img)
+    if height < width:
+        ratio = height / resize
+        long_side = round(width / ratio)
+        resize_shape = (resize, long_side, 3)
+    else: #height > width
+        ratio = width / resize
+        long_side = round(height / ratio)
+        resize_shape = (long_side, resize, 3)
+    return skimage_resize(img, resize_shape, mode='reflect')
 
 def center_crop(x, center_crop_size, **kwargs):
     """
@@ -33,10 +54,11 @@ def center_crop(x, center_crop_size, **kwargs):
 
 def random_crop(x, random_crop_size, sync_seed=None):
     """
-    Return a preprocessed random crop of an array x
+    Return a preprocessed random crop of a resized array x
     @random_crop_size: Tuple. (width, height, channels)
     """
     np.random.seed(sync_seed)
+    x = resize_img(img=x, resize=512) # resize shortest img side to 512
     w, h = x.shape[0], x.shape[1]
     rangew = (w - random_crop_size[0])
     rangeh = (h - random_crop_size[1])
@@ -68,7 +90,7 @@ def genTrain():
     horizontal_flip=True, # Randomly flip inputs horizontally.
     vertical_flip=False, # Randomly flip inputs vertically.
     rescale=None, # If None or 0, no rescaling is applied, otherwise we multiply the data by the value provided (before applying any other transformation)
-    preprocessing_function=preprocess_input, # The function should take one argument: one image (Numpy tensor with rank 3), and should output a Numpy tensor with the same shape.
+    #preprocessing_function=preprocess_input, # The function should take one argument: one image (Numpy tensor with rank 3), and should output a Numpy tensor with the same shape.
     data_format='channels_last')
 
 def genTest():
@@ -90,7 +112,7 @@ def traingen(path, genTrain, BATCH_SIZE, RANDOM_CROP_SIZE):
         batch_size=BATCH_SIZE, # default: 32.
         shuffle=True,
         #seed=1234,
-        #save_to_dir='../generated_img', #Path to directory where to save generated pics
+        #save_to_dir='./generated_img', #Path to directory where to save generated pics
         class_mode='input', #one of "categorical", "binary", "sparse" or None
         random_crop=random_crop,
         random_crop_size=RANDOM_CROP_SIZE
